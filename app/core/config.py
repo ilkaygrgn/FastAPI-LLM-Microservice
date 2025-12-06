@@ -4,17 +4,18 @@ from typing import Optional
 # Use pydantic_settings for modern Pydantic versions
 class Settings(BaseSettings):
     # Core Security
-    SECRET_KEY: str
-    ACCESS_TOKEN_EXPIRE_MINUTES: int
+    SECRET_KEY: str = ""
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
     # Database
-    DATABASE_URL: str
+    DATABASE_URL: str = "sqlite:///./llm.db"
 
     # LLM Service
-    OPENAI_API_KEY: str
+    OPENAI_API_KEY: str = ""
 
     # Background Queue
-    REDIS_URL: str
+    REDIS_URL: str = "redis://localhost:6379"
 
     # Configuration class for Pydantic Settings
     model_config = SettingsConfigDict(
