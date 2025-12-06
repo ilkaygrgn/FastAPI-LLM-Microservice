@@ -12,3 +12,4 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     full_name = Column(String, nullable=True)
+    refresh_token = Column(String, nullable=True)

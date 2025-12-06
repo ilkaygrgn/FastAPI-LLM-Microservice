@@ -35,8 +35,15 @@ async def login(user: UserLogin, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials"
         )
+    # Create both access and refresh tokens
     access_token = create_access_token(data={"sub": authenticated.email})
-    return {"access_token": access_token, "token_type": "bearer", "user_email": authenticated.email}
+    refresh_token = create_refresh_token(data={"sub": authenticated.email})
+    
+    # Store refresh token in database
+    authenticated.refresh_token = refresh_token
+    db.commit()
+    
+    return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
 
 
 @router.post("/logout")

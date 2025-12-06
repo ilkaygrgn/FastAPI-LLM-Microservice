@@ -7,4 +7,4 @@ def start_job():
     task_id = str(uuid.uuid4())
     # .delay() is a Celery method that schedules the task to run asynchronously
     task = run_long_task.delay(task_id)
-    return {task_id: task.id, "status": "PENDING"}
+    return {"task_id": task_id, "status": "PENDING"}
