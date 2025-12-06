@@ -1,0 +1,46 @@
+# docker-compose.yml
+
+version: '3.8'
+
+services:
+  # 1. Redis Service (for Celery broker/backend and future session storage)
+  redis:
+    image: redis:7.2-alpine
+    container_name: redis_server
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data # Persistent storage for Redis data
+
+  # 2. FastAPI Application Service
+  api:
+    build: .
+    container_name: fastapi_api
+    command: gunicorn app.main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+    volumes:
+      - ./app:/app/app # Mount source code for easy development (optional, but useful)
+    ports:
+      - "8000:8000"
+    environment:
+      # Use the service name defined in this file for internal network communication
+      REDIS_HOST: redis
+      DATABASE_URL: sqlite:///./app.db # Update this for PostgreSQL/other DB later
+    depends_on:
+      - redis
+      # - db # Future PostgreSQL service
+
+  # 3. Celery Worker Service
+  worker:
+    build: .
+    container_name: celery_worker
+    command: celery -A app.workers.worker celery_app worker --loglevel=info
+    volumes:
+      - ./app:/app/app
+    environment:
+      REDIS_HOST: redis
+    depends_on:
+      - redis
+      - api
+
+volumes:
+  redis_data:

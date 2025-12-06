@@ -5,9 +5,13 @@ from typing import Optional
 class Settings(BaseSettings):
     # Core Security
     SECRET_KEY: str = ""
+    REFRESH_SECRET_KEY: str = ""
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
-
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    # Celery
+    CELERY_BROKER_URL: str = "redis://localhost:6379/0"
+    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
     # Database
     DATABASE_URL: str = "sqlite:///./llm.db"
 
