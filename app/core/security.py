@@ -139,9 +139,6 @@ async def get_current_user(
     #token: str = Depends(oauth2_scheme)
     token: HTTPAuthorizationCredentials = Depends(oauth2_scheme)
 ):
-    # --- TEMPORARY LOGGING ---
-    print(f"HEEEEELLLLOOOOOOOOOO get_current_user called with token: {token}", flush=True)
-    # --- END TEMPORARY LOGGING ---
     """
     Dependency function to get the current user from the token.
     Raises 401 UNAUTHORIZED if the token is invalid or user not found.
@@ -170,12 +167,12 @@ async def get_current_user(
         
     return user
 
-def get_current_active_user(current_user: User = Depends(get_current_user)):
-    """
-    Dependency function to ensure the user is active (can be extended).
-    """
-    # You can add logic here to check user.is_active or user.is_disabled
-    # For now, we'll assume any found user is active.
-    # if not current_user.is_active:
-    #     raise HTTPException(status_code=400, detail="Inactive user")
-    return current_user
+# def get_current_active_user(current_user: User = Depends(get_current_user)):
+#     """
+#     Dependency function to ensure the user is active (can be extended).
+#     """
+#     # You can add logic here to check user.is_active or user.is_disabled
+#     # For now, we'll assume any found user is active.
+#     # if not current_user.is_active:
+#     #     raise HTTPException(status_code=400, detail="Inactive user")
+#     return current_user

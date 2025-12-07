@@ -1,5 +1,5 @@
 # This endpoint will handle the request and use a StreamingResponse.
-from fastapi import APIRouter
+from fastapi import APIRouter, File, UploadFile, Depends
 from fastapi.responses import StreamingResponse
 from app.services.llm_service import stream_chat_response, stream_chat_response_with_history
 from app.schemas.chat import ChatRequest
@@ -8,7 +8,9 @@ from app.core.security import get_current_user
 from app.models.user import User
 from fastapi import Depends, HTTPException, status
 
-from fastapi import Depends
+from app.workers.tasks import index_document_task
+import shutil
+import os
 
 router = APIRouter()
 
@@ -31,23 +33,40 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
     
     return StreamingResponse(generator, media_type="text/event-stream")
 
+"""
+This part is for the RAG Document Upload
+"""
+DOCUMENTS_DIR = os.path.join(os.getcwd(), "documents")
+os.makedirs(DOCUMENTS_DIR, exist_ok=True) # Create the directory if it doesn't exist
 
-    # """Streams a chat response from the LLM"""
-
-    # # In Phase 2, we will use a temporary, single-turn message list.
-    # # In Phase 3, we will integrate session_id with Redis/DB for history.
-
-    # messages = [
-    #     # System Message to set the AI's personality
-    #     {"role": "system", "content": "You are a helpful, senior Python and LLM engineering assistant. Be concise and professional."},
-    #     # User's current message
-    #     {"role": "user", "content": request.messages}
-    # ]
-
-    # # Get the generator from the service layer
-    # generator = stream_chat_response(messages)
+@router.post("/upload-document", summary="Upload a document for RAG indexing")
+async def upload_document(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported file format. Only PDF files are allowed."
+        )
     
-    # # Return the generator wrapped in FastAPI's StreamingResponse
-    # # media_type 'text/event-stream' is often used for Server-Sent Events (SSE)
-    # # which is ideal for streaming chat.
-    # return StreamingResponse(generator, media_type="text/event-stream")
+    # Save the file to the documents directory
+    file_path = os.path.join(DOCUMENTS_DIR, file.filename)
+    
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload document: {str(e)}"
+        )
+
+    # Trigger the background indexing task (Step 2)
+    index_document_task.delay(file_path, current_user.id)
+    
+    return {
+        "filename": file.filename,
+        "message": "Document uploaded successfully. Indexing started in the background."
+    }
+    

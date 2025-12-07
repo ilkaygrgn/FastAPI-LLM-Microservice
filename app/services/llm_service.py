@@ -33,24 +33,7 @@ def stream_chat_response(messages: List[Dict[str, str]]) -> Generator[str, None,
 
     except Exception as e:
         yield f"ERROR: Gemini API call failed: {str(e)}"
-# def stream_chat_response(messages: List[Dict[str, str]]) -> Generator[str, None, None]:
-#     """Connects to the OpenAI API and streams the response content chunk by chunk"""
-#     try:
-#         stream = client.chat.completions.create(
-#             #model=settings.LLM_MODEL,
-#             model=settings.GOOGLE_LLM_MODEL,
-#             messages=messages,
-#             stream=True
-#         )
-#         for chunk in stream:
-#             # Check if content exists and yield it
-#             content = chunk.choices[0].delta.content
-#             if content is not None:
-#                 yield content
-#     except Exception as e:
-#         yield f"ERROR: LLM API call failed: {str(e)}"
 
-# A non-streaming version for background tasks (optional, but good practice)
 
 def generate_chat_response_sync(messages: List[Dict[str, str]]) -> str:
     """Generates a synchronous Gemini response."""
@@ -64,21 +47,12 @@ def generate_chat_response_sync(messages: List[Dict[str, str]]) -> str:
 
     return response.text
 
-# def generate_chat_response_sync(messages: List[Dict[str, str]]) -> str:
-#     """Generates a chat response synchronously (for background tasks)"""
-#     response = client.chat.completions.create(
-#         #model=settings.LLM_MODEL,
-#         model=settings.GOOGLE_LLM_MODEL,
-#         messages=messages,
-#         stream=False
-#     )
-#     return response.choices[0].message.content
-
 
 """
 History Management
 """     
 from app.services.chat_history import get_session_history, add_message_to_history
+from app.services.vector_db_service import get_vector_store
 
 
 # app/services/llm_service.py (Fixed for Gemini API content structure)
@@ -137,11 +111,29 @@ def stream_chat_response_with_history(
     messages = formatted_history
     messages.append(format_for_gemini(raw_user_msg_dict))
 
+    """
+    # **PHASE 4: RAG Retrieval**
+    """
+    vector_store = get_vector_store()
+    # Retrieve top 4 most relevant chunks based on the user's current message
+    retrieved_docs = vector_store.similarity_search(user_message, k=4)
+    
+    # Format the retrieved documents into a context string
+    rag_context = "\n---\n".join([doc.page_content for doc in retrieved_docs])
+    """
+    RAG retrieval
+    """
+
     #system_prompt = "You are a helpful, senior Python and LLM engineering assistant. Be concise and professional."
     # Add user profile to the system prompt
     system_prompt = f"""
     You are a helpful, senior Python and LLM engineering assistant. Be concise and professional.
     
+    --- RAG KNOWLEDGE BASE ---
+    Use the following retrieved context to answer the user's question accurately. If the context does not contain the answer, state that you cannot find the answer in the provided documents.
+    Context: {rag_context}
+    ---
+
     --- USER PROFILE ---
     {user_profile_data}
     ---

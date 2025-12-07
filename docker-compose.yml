@@ -12,19 +12,33 @@ services:
     volumes:
       - redis_data:/data # Persistent storage for Redis data
 
-  # 2. FastAPI Application Service
+  # 2. PostgreSQL with pgvector extension
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: postgres_db
+    environment:
+      POSTGRES_USER: llmuser
+      POSTGRES_PASSWORD: llmpassword
+      POSTGRES_DB: llmdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # 3. FastAPI Application Service
   api:
     build: .
     container_name: fastapi_api
     command: gunicorn app.main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
     volumes:
       - ./app:/app/app # Mount source code for easy development (optional, but useful)
+      - documents_data:/app/documents # Shared volume for uploaded documents
     ports:
       - "8000:8000"
     environment:
       # Use the service name defined in this file for internal network communication
       REDIS_HOST: redis
-      DATABASE_URL: sqlite:///./app.db # Update this for PostgreSQL/other DB later
+      DATABASE_URL: postgresql://llmuser:llmpassword@db:5432/llmdb
       OPENAI_API_KEY: ${OPENAI_API_KEY} # Reads from your shell environment
       LLM_MODEL: gpt-4o-mini # Choose a powerful streaming model
       GOOGLE_API_KEY: ${GOOGLE_API_KEY} 
@@ -32,18 +46,19 @@ services:
       SECRET_KEY: ${SECRET_KEY}
     depends_on:
       - redis
-      # - db # Future PostgreSQL service
+      - db
 
-  # 3. Celery Worker Service
+  # 4. Celery Worker Service
   worker:
     build: .
     container_name: celery_worker
     command: celery -A app.workers.worker worker --loglevel=info
     volumes:
       - ./app:/app/app
+      - documents_data:/app/documents # Shared volume for uploaded documents
     environment:
       REDIS_HOST: redis
-      DATABASE_URL: sqlite:///./app.db
+      DATABASE_URL: postgresql://llmuser:llmpassword@db:5432/llmdb
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
       GOOGLE_LLM_MODEL: gemini-2.5-flash
       SECRET_KEY: ${SECRET_KEY}
@@ -51,7 +66,10 @@ services:
       LLM_MODEL: gpt-4o-mini
     depends_on:
       - redis
+      - db
       - api
 
 volumes:
   redis_data:
+  postgres_data:
+  documents_data: # Shared volume for documents between API and worker
