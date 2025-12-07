@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text
+from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 from app.db.models import Base
 
@@ -13,3 +14,4 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     full_name = Column(String, nullable=True)
     refresh_token = Column(String, nullable=True)
+    user_profile: Mapped[str] = mapped_column(Text, default="No profile established.")

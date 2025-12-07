@@ -43,7 +43,7 @@ async def login(user: UserLogin, db: Session = Depends(get_db)):
     authenticated.refresh_token = refresh_token
     db.commit()
     
-    return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+    return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer", "user_profile": authenticated.user_profile}
 
 
 @router.post("/logout")

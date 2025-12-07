@@ -1,5 +1,5 @@
 # app/services/job_service.py
-from app.workers.worker import run_long_task
+from app.workers.tasks import run_long_task
 import uuid
 
 def start_job():

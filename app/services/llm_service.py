@@ -1,10 +1,13 @@
 # app/services/llm_service.py
 
 import json
-from openai import OpenAI, api_key
+# from openai import OpenAI, api_key
 from app.core.config import settings
 from typing import Generator, List, Dict
 from app.db.redis_client import redis_client
+from app.workers.tasks import update_user_profile_task
+from app.db.database import SessionLocal
+from app.models.user import User
 
 from google import genai
 
@@ -75,30 +78,7 @@ def generate_chat_response_sync(messages: List[Dict[str, str]]) -> str:
 """
 History Management
 """     
-# Key template for storing history:
-HISTORY_KEY = "chat_history:{user_id}:{session_id}"
-MAX_HISTORY_LENGTH = 10 # Keep the last 10 messages (5 user, 5 assistant)
-
-def get_session_history(user_id: str, session_id: str) -> List[Dict[str, str]]:
-    """Retrieves the chat history for a given user and session from Redis"""
-    if not redis_client:
-        return []
-
-    key = HISTORY_KEY.format(user_id=user_id, session_id=session_id)
-    # LTRIM keeps the history size bounded (short-term memory window)
-    history_json = redis_client.lrange(key, -MAX_HISTORY_LENGTH, -1)
-
-    return [json.loads(msg) for msg in history_json]
-
-def add_message_to_history(user_id: str, session_id: str, message: Dict[str, str]):
-    """Adds a message to the chat history for a given user and session in Redis"""
-    if not redis_client:
-        return
-    key = HISTORY_KEY.format(user_id=user_id, session_id=session_id)
-    # LPUSH adds to the left (head). LTRIM can then easily keep the length bounded.
-    redis_client.rpush(key, json.dumps(message))
-    # Keep the list size bounded
-    redis_client.ltrim(key, -MAX_HISTORY_LENGTH, -1)
+from app.services.chat_history import get_session_history, add_message_to_history
 
 
 # app/services/llm_service.py (Fixed for Gemini API content structure)
@@ -143,6 +123,13 @@ def stream_chat_response_with_history(
     raw_user_msg_dict = {"role": "user", "content": user_message}
     add_message_to_history(user_id, session_id, raw_user_msg_dict)
 
+    #  Retrive user profile from the database for long-term memory update
+    user_profile_data = "No profile established."
+    with SessionLocal() as db:
+        user = db.query(User).filter(User.id == user_id).first()
+        if user and user.user_profile:
+            user_profile_data = user.user_profile
+
     # 3. Construct message list for the API call
     
     # The final list of messages to send to the API is the formatted history
@@ -150,8 +137,17 @@ def stream_chat_response_with_history(
     messages = formatted_history
     messages.append(format_for_gemini(raw_user_msg_dict))
 
-    system_prompt = "You are a helpful, senior Python and LLM engineering assistant. Be concise and professional."
-
+    #system_prompt = "You are a helpful, senior Python and LLM engineering assistant. Be concise and professional."
+    # Add user profile to the system prompt
+    system_prompt = f"""
+    You are a helpful, senior Python and LLM engineering assistant. Be concise and professional.
+    
+    --- USER PROFILE ---
+    {user_profile_data}
+    ---
+    
+    Maintain context based on the profile and the conversation history.
+    """
 
     # 4. Stream response and capture full message (Gemini API Call)
     full_response_content = ""
@@ -179,6 +175,9 @@ def stream_chat_response_with_history(
             # IMPORTANT: Save the history using the simple 'assistant' role for easy retrieval later
             assistant_msg_dict = {"role": "assistant", "content": full_response_content}
             add_message_to_history(user_id, session_id, assistant_msg_dict)
+
+            # trigger log-term memory update
+            update_user_profile_task.delay(user_id, session_id)
 
 # # Update the primary streaming function:
 # def stream_chat_response_with_history(user_id: str, session_id: str, user_message: str) -> Generator[str, None, None]:
