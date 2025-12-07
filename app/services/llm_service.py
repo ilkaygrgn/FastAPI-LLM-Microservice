@@ -14,32 +14,62 @@ from google import genai
 client = genai.Client(api_key=settings.GOOGLE_API_KEY)
 
 def stream_chat_response(messages: List[Dict[str, str]]) -> Generator[str, None, None]:
-    """Connects to the OpenAI API and streams the response content chunk by chunk"""
+    """Streams a Gemini response chunk-by-chunk."""
     try:
-        stream = client.chat.completions.create(
-            #model=settings.LLM_MODEL,
+        # Convert OpenAI-style messages → Gemini text format
+        prompt = "\n".join([f"{msg['role']}: {msg['content']}" for msg in messages])
+
+        stream = client.models.generate_content_stream(
             model=settings.GOOGLE_LLM_MODEL,
-            messages=messages,
-            stream=True
+            contents=prompt,
         )
+
         for chunk in stream:
-            # Check if content exists and yield it
-            content = chunk.choices[0].delta.content
-            if content is not None:
-                yield content
+            if chunk.text:
+                yield chunk.text
+
     except Exception as e:
-        yield f"ERROR: LLM API call failed: {str(e)}"
+        yield f"ERROR: Gemini API call failed: {str(e)}"
+# def stream_chat_response(messages: List[Dict[str, str]]) -> Generator[str, None, None]:
+#     """Connects to the OpenAI API and streams the response content chunk by chunk"""
+#     try:
+#         stream = client.chat.completions.create(
+#             #model=settings.LLM_MODEL,
+#             model=settings.GOOGLE_LLM_MODEL,
+#             messages=messages,
+#             stream=True
+#         )
+#         for chunk in stream:
+#             # Check if content exists and yield it
+#             content = chunk.choices[0].delta.content
+#             if content is not None:
+#                 yield content
+#     except Exception as e:
+#         yield f"ERROR: LLM API call failed: {str(e)}"
 
 # A non-streaming version for background tasks (optional, but good practice)
+
 def generate_chat_response_sync(messages: List[Dict[str, str]]) -> str:
-    """Generates a chat response synchronously (for background tasks)"""
-    response = client.chat.completions.create(
-        #model=settings.LLM_MODEL,
+    """Generates a synchronous Gemini response."""
+    
+    prompt = "\n".join([f"{msg['role']}: {msg['content']}" for msg in messages])
+
+    response = client.models.generate_content(
         model=settings.GOOGLE_LLM_MODEL,
-        messages=messages,
-        stream=False
+        contents=prompt,
     )
-    return response.choices[0].message.content
+
+    return response.text
+
+# def generate_chat_response_sync(messages: List[Dict[str, str]]) -> str:
+#     """Generates a chat response synchronously (for background tasks)"""
+#     response = client.chat.completions.create(
+#         #model=settings.LLM_MODEL,
+#         model=settings.GOOGLE_LLM_MODEL,
+#         messages=messages,
+#         stream=False
+#     )
+#     return response.choices[0].message.content
 
 
 """
