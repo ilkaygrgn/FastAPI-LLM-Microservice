@@ -25,6 +25,11 @@ services:
       # Use the service name defined in this file for internal network communication
       REDIS_HOST: redis
       DATABASE_URL: sqlite:///./app.db # Update this for PostgreSQL/other DB later
+      OPENAI_API_KEY: ${OPENAI_API_KEY} # Reads from your shell environment
+      LLM_MODEL: gpt-4o-mini # Choose a powerful streaming model
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY} 
+      GOOGLE_LLM_MODEL: gemini-2.5-flash
+      SECRET_KEY: ${SECRET_KEY}
     depends_on:
       - redis
       # - db # Future PostgreSQL service
@@ -33,7 +38,7 @@ services:
   worker:
     build: .
     container_name: celery_worker
-    command: celery -A app.workers.worker celery_app worker --loglevel=info
+    command: celery -A app.workers.worker worker --loglevel=info
     volumes:
       - ./app:/app/app
     environment:

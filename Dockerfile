@@ -18,6 +18,8 @@ COPY ./app /app/app
 # Expose the port the app runs on
 EXPOSE 8000
 
+ENV PYTHONUNBUFFERED=1
+
 # Command to run the application using Uvicorn
 # We use 'gunicorn' with 'uvicorn.workers.UvicornWorker' for production-ready async handling
 CMD ["gunicorn", "app.main:app", "--workers", "4", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000"]

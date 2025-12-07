@@ -29,6 +29,9 @@ async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
 @router.post("/login", response_model=Token)
 async def login(user: UserLogin, db: Session = Depends(get_db)):
     """Login and return JWT token"""
+    # --- TEMPORARY LOGGING ---
+    print(f"HEEEEELLLLOOOOOOOOOO login called with user: {user.email}", flush=True)
+    # --- END TEMPORARY LOGGING ---
     authenticated = authenticate_user(db, user.email, user.password)
     if not authenticated:
         raise HTTPException(

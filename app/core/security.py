@@ -3,7 +3,7 @@ from passlib.context import CryptContext
 from app.core.config import settings
 from datetime import datetime, timedelta
 from jose import jwt, JWTError
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer, OAuth2PasswordBearer
 from fastapi import Depends, HTTPException, status
 from typing import Optional
 from app.db.session import get_db 
@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 
 
 # Define the OAuth2 scheme (where FastAPI looks for the token: Authorization: Bearer <token>)
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+#oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_scheme = HTTPBearer()
 # Keep passlib context for backward compatibility with existing hashes
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -108,7 +109,13 @@ def decode_access_token(token: str) -> Optional[str]:
         )
         # 2. Extract the subject (email)
         email: str = payload.get("sub")
-        if email is None:
+        # --- TEMPORARY LOGGING ---
+        print(f"DEBUG: Token decoded successfully. Email found: {email}")
+        # --- END TEMPORARY LOGGING ---
+        if not email:
+            # --- TEMPORARY LOGGING ---
+            print("DEBUG: Token decoded, but 'sub' (email) claim is missing.")
+            # --- END TEMPORARY LOGGING ---
             return None
         
         # 3. Check token expiration (optional, JOSE handles this by default but good for clarity)
@@ -121,17 +128,28 @@ def decode_access_token(token: str) -> Optional[str]:
     except JWTError as e:
         # Handle all other JWT errors (invalid signature, claims, etc.)
         # print(f"JWT Decode Error: {e}") # For debugging
+        # --- TEMPORARY LOGGING ---
+        print(f"DEBUG: JWT Decode FAILED! Error: {e}") 
+        # --- END TEMPORARY LOGGING ---
         return None # Return None on failure
 
 
 async def get_current_user(
     db: Session = Depends(get_db),
-    token: str = Depends(oauth2_scheme)
+    #token: str = Depends(oauth2_scheme)
+    token: HTTPAuthorizationCredentials = Depends(oauth2_scheme)
 ):
+    # --- TEMPORARY LOGGING ---
+    print(f"HEEEEELLLLOOOOOOOOOO get_current_user called with token: {token}", flush=True)
+    # --- END TEMPORARY LOGGING ---
     """
     Dependency function to get the current user from the token.
     Raises 401 UNAUTHORIZED if the token is invalid or user not found.
     """
+
+    # Extract the actual token string
+    token_str = token.credentials
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -139,7 +157,7 @@ async def get_current_user(
     )
     
     # Use the utility to get the user email
-    email = decode_access_token(token)
+    email = decode_access_token(token_str)
     
     if email is None:
         raise credentials_exception
