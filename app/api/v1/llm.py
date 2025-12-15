@@ -14,8 +14,14 @@ import os
 
 router = APIRouter()
 
-@router.post("/chat", summary="Stream a multi-turn response from the LLM")
-async def chat(request: ChatRequest, current_user: User = Depends(get_current_user)):
+@router.post("/chat", summary="Stream a multi-turn response from the LLM (with optional Function Calling)")
+async def chat(
+    request: ChatRequest,
+    current_user: User = Depends(get_current_user),
+    enable_tools: bool = Query(
+        True, 
+        description="Enable Function Calling (True) for tool use, or use pure streaming (False) for speed."
+    )):
 
     # Ensure a session_id is provided for multi-turn chat
     if not request.session_id:
@@ -26,9 +32,10 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
 
     # Get the generator from the service layer, passing user ID and session ID
     generator = stream_chat_response_with_history(
-        user_id=current_user.id, # Assumes your User model has an 'id'
+        user_id=current_user.id, 
         session_id=request.session_id,
-        user_message=request.message
+        user_message=request.message,
+        enable_tools=enable_tools
     )
     
     return StreamingResponse(generator, media_type="text/event-stream")

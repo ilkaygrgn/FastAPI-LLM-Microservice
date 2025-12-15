@@ -60,7 +60,13 @@ from app.services.vector_db_service import get_vector_store
 from google import genai
 from app.core.config import settings
 from typing import Generator, List, Dict
-# Assuming 'client' is initialized and helper functions are available
+from app.tools.agent_tools import get_real_time_stock_price, schedule_meeting
+
+#Map function names to the actual callable functions
+TOOL_MAP = {
+    "get_real_time_stock_price": get_real_time_stock_price,
+    "schedule_meeting": schedule_meeting,
+}
 
 def format_for_gemini(message: Dict[str, str]) -> Dict:
     """Transforms a simple {'role': 'user', 'content': 'text'} dict 
@@ -82,7 +88,8 @@ def format_for_gemini(message: Dict[str, str]) -> Dict:
 def stream_chat_response_with_history(
     user_id: str, 
     session_id: str, 
-    user_message: str
+    user_message: str,
+    enable_tools: bool = False,# <-- Control switch for Function Calling
 ) -> Generator[str, None, None]:
     
     # 1. Retrieve and FORMAT history
@@ -142,68 +149,196 @@ def stream_chat_response_with_history(
     """
 
     # 4. Stream response and capture full message (Gemini API Call)
+    final_response_stream = None
     full_response_content = ""
-    try:
-        stream = client.models.generate_content_stream(
-            #model=settings.LLM_MODEL,
+
+    if enable_tools:
+        # 4. INITIAL API Call (Non-Streaming to Check for Tool Use)
+        try:
+            respose = client.models.generate_content(
+                model=settings.GOOGLE_LLM_MODEL,
+                contents=messages,
+                config=genai.types.GenerateContentConfig(
+                    system_instruction=system_prompt,
+                    tools=list(TOOL_MAP.values()), # <-- Provide the functions as tools
+                )
+            )
+        except Exception as e:
+            yield f"ERROR: Gemini API initial tool call failed: {str(e)}"
+            return
+
+        # 5. Tool Use Logic Loop
+        if response.function_calls:
+            # Execute tool(s) and append results to messages list...
+            function_results = []
+            for call in response.function_calls:
+                func_name = call.name
+                func_args = dict(call.args)
+
+            if func_name in TOOL_MAP:
+                function_to_call = TOOL_MAP[func_name]
+                tool_result = function_to_call(**func_args)
+
+                function_results.append(
+                    genai.types.Part.from_function_response(
+                        name=func_name,
+                        response={"result": tool_result}
+                    )
+                )
+                print(f"Tool executed: {func_name}. Result: {tool_result}")
+
+            messages.append(response.candidates[0].content)
+            messages.append(genai,types.Content(role="tool", parts=function_results))
+
+            # Call the model a second time (streaming) to get the final response
+            final_response_stream = client.models.generate_content_stream(
+                model=settings.GOOGLE_LLM_MODEL,
+                contents=messages,
+                config=genai.types.GenerateContentConfig(
+                    system_instruction=system_prompt
+                )
+            )
+
+        else:
+            # If no function call, fall through to the pure streaming path (next block)
+            pass
+
+    # --- B. PURE STREAMING PATH (Tool Disabled or Tool Not Called) ---
+    if final_response_stream is None:
+        # This block executes if:
+        # 1. enable_tools was False OR
+        # 2. enable_tools was True, but the model did NOT request a function call.
+        
+        # This is the single, direct, full-streaming call you wanted to preserve.
+        final_response_stream = client.models.generate_content_stream(
             model=settings.GOOGLE_LLM_MODEL,
-            contents=messages, # Now contains the correctly structured list of dictionaries
+            contents=messages,
             config=genai.types.GenerateContentConfig(
-                system_instruction=system_prompt
+                system_instruction=system_prompt,
+                # Note: We can optionally pass tools=list(TOOL_MAP.values()) here if you
+                # still want the model to see the tool definitions for context,
+                # but without the intention of using them in this path. Let's omit it for simplicity.
             )
         )
-        for chunk in stream:
+
+    # 6. Stream the Final Response and Cleanup 
+    try:
+        # Use the determined stream (from A or B)
+        for chunk in final_response_stream:
             content = chunk.text
             if content:
                 full_response_content += content
                 yield content
 
     except Exception as e:
-        yield f"ERROR: Gemini API call failed: {str(e)}"
+        yield f"ERROR: Gemini API streaming failed: {str(e)}"
         
     finally:
-        # 5. Add full assistant response to history (using simple format for Redis)
+        # 7. Add full assistant response to history(redis) and trigger long-term memory 
         if full_response_content:
-            # IMPORTANT: Save the history using the simple 'assistant' role for easy retrieval later
+            # Save the history using the simple 'assistant' role for easy retrieval later
             assistant_msg_dict = {"role": "assistant", "content": full_response_content}
             add_message_to_history(user_id, session_id, assistant_msg_dict)
 
             # trigger log-term memory update
-            update_user_profile_task.delay(user_id, session_id)
-
-# # Update the primary streaming function:
-# def stream_chat_response_with_history(user_id: str, session_id: str, user_message: str) -> Generator[str, None, None]:
+            update_user_profile_task.delay(user_id, session_id)      
     
-#     # 1. Retrieve history
-#     history = get_session_history(user_id, session_id)
+
+
+
+
+# def stream_chat_response_with_history(
+#     user_id: str, 
+#     session_id: str, 
+#     user_message: str,
+#     enable_tools: bool = False,# <-- Control switch for Function Calling
+# ) -> Generator[str, None, None]:
     
-#     # 2. Add current user message to memory (immediately, in case of failure later)
-#     user_msg_dict = {"role": "user", "content": user_message}
-#     add_message_to_history(user_id, session_id, user_msg_dict)
+#     # 1. Retrieve and FORMAT history
+#     # The history retrieved from Redis is in the simple {'role': 'user', 'content': 'text'} format
+#     raw_history = get_session_history(user_id, session_id)
+    
+#     # Convert all history items to the required Gemini API format
+#     formatted_history = [format_for_gemini(msg) for msg in raw_history]
+    
+    
+#     # 2. Prepare the current user message and save it (using the simple format for Redis)
+#     raw_user_msg_dict = {"role": "user", "content": user_message}
+#     add_message_to_history(user_id, session_id, raw_user_msg_dict)
 
-#     # 3. Construct message list for the LLM
-#     messages = [
-#         {"role": "system", "content": "You are a helpful, senior Python and LLM engineering assistant. Be concise and professional."},
-#     ]
-#     messages.extend(history) # Append previous messages
-#     messages.append(user_msg_dict) # Append current user message
+#     #  Retrive user profile from the database for long-term memory update
+#     user_profile_data = "No profile established."
+#     with SessionLocal() as db:
+#         user = db.query(User).filter(User.id == user_id).first()
+#         if user and user.user_profile:
+#             user_profile_data = user.user_profile
 
-#     # 4. Stream response and capture full message
+#     # 3. Construct message list for the API call
+    
+#     # The final list of messages to send to the API is the formatted history
+#     # plus the formatted current message.
+#     messages = formatted_history
+#     messages.append(format_for_gemini(raw_user_msg_dict))
+
+#     """
+#     # **PHASE 4: RAG Retrieval**
+#     """
+#     vector_store = get_vector_store()
+#     # Retrieve top 4 most relevant chunks based on the user's current message
+#     retrieved_docs = vector_store.similarity_search(user_message, k=4)
+    
+#     # Format the retrieved documents into a context string
+#     rag_context = "\n---\n".join([doc.page_content for doc in retrieved_docs])
+#     """
+#     RAG retrieval
+#     """
+
+#     #system_prompt = "You are a helpful, senior Python and LLM engineering assistant. Be concise and professional."
+#     # Add user profile to the system prompt
+#     system_prompt = f"""
+#     You are a helpful, senior Python and LLM engineering assistant. Be concise and professional.
+    
+#     --- RAG KNOWLEDGE BASE ---
+#     Use the following retrieved context to answer the user's question accurately. If the context does not contain the answer, state that you cannot find the answer in the provided documents.
+#     Context: {rag_context}
+#     ---
+
+#     --- USER PROFILE ---
+#     {user_profile_data}
+#     ---
+    
+#     Maintain context based on the profile and the conversation history.
+#     """
+
+#     # 4. Stream response and capture full message (Gemini API Call)
+#     final_response_stream = None
 #     full_response_content = ""
+    
 #     try:
-#         stream = client.chat.completions.create(
-#             model=settings.LLM_MODEL,
-#             messages=messages,
-#             stream=True,
+#         stream = client.models.generate_content_stream(
+#             model=settings.GOOGLE_LLM_MODEL,
+#             contents=messages,
+#             config=genai.types.GenerateContentConfig(
+#                 system_instruction=system_prompt,
+#                 tools=list(TOOL_MAP.values()), # <-- Provide the functions as tools
+#             )
 #         )
 #         for chunk in stream:
-#             content = chunk.choices[0].delta.content
+#             content = chunk.text
 #             if content:
 #                 full_response_content += content
 #                 yield content
 
+#     except Exception as e:
+#         yield f"ERROR: Gemini API call failed: {str(e)}"
+        
 #     finally:
-#         # 5. Add full assistant response to history
+#         # 5. Add full assistant response to history (using simple format for Redis)
 #         if full_response_content:
+#             # IMPORTANT: Save the history using the simple 'assistant' role for easy retrieval later
 #             assistant_msg_dict = {"role": "assistant", "content": full_response_content}
 #             add_message_to_history(user_id, session_id, assistant_msg_dict)
+
+#             # trigger log-term memory update
+#             update_user_profile_task.delay(user_id, session_id)
+
