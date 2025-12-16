@@ -1,6 +1,10 @@
 from typing import Literal
 
 def get_real_time_stock_price(ticker_symbol: str) -> str:
+    """
+    REQUIRED: Call this function whenever the user asks for the price, 
+    value, or quote of a specific stock ticker (e.g., GOOG, AAPL).
+    """
     # For now, we return a mock value.
     if ticker_symbol.upper() == "GOOG":
         return "The current price for GOOG is $142.50. (Source: Mock API)"

@@ -1,5 +1,5 @@
 # This endpoint will handle the request and use a StreamingResponse.
-from fastapi import APIRouter, File, UploadFile, Depends
+from fastapi import APIRouter, File, UploadFile, Depends, Query
 from fastapi.responses import StreamingResponse
 from app.services.llm_service import stream_chat_response, stream_chat_response_with_history
 from app.schemas.chat import ChatRequest
@@ -35,7 +35,8 @@ async def chat(
         user_id=current_user.id, 
         session_id=request.session_id,
         user_message=request.message,
-        enable_tools=enable_tools
+        enable_tools=enable_tools,
+        use_rag=request.use_rag
     )
     
     return StreamingResponse(generator, media_type="text/event-stream")

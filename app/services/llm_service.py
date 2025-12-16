@@ -90,6 +90,7 @@ def stream_chat_response_with_history(
     session_id: str, 
     user_message: str,
     enable_tools: bool = False,# <-- Control switch for Function Calling
+    use_rag: bool = True, # <-- Control switch for RAG
 ) -> Generator[str, None, None]:
     
     # 1. Retrieve and FORMAT history
@@ -121,12 +122,14 @@ def stream_chat_response_with_history(
     """
     # **PHASE 4: RAG Retrieval**
     """
-    vector_store = get_vector_store()
-    # Retrieve top 4 most relevant chunks based on the user's current message
-    retrieved_docs = vector_store.similarity_search(user_message, k=4)
-    
-    # Format the retrieved documents into a context string
-    rag_context = "\n---\n".join([doc.page_content for doc in retrieved_docs])
+    rag_context = ""
+    if use_rag:
+        vector_store = get_vector_store()
+        # Retrieve top 4 most relevant chunks based on the user's current message
+        retrieved_docs = vector_store.similarity_search(user_message, k=4)
+        
+        # Format the retrieved documents into a context string
+        rag_context = "\n---\n".join([doc.page_content for doc in retrieved_docs])
     """
     RAG retrieval
     """
@@ -134,11 +137,14 @@ def stream_chat_response_with_history(
     #system_prompt = "You are a helpful, senior Python and LLM engineering assistant. Be concise and professional."
     # Add user profile to the system prompt
     system_prompt = f"""
-    You are a helpful, senior Python and LLM engineering assistant. Be concise and professional.
-    
+    You are a senior AI Assistant with access to real-time tools.
+        
+    --- MANDATORY INSTRUCTION ---
+    If a user asks for stock prices or to schedule a meeting, you MUST use the provided tools. 
+    Do not tell the user you don't have access to data; use the functions provided to fetch it.
+    ------------------------------
     --- RAG KNOWLEDGE BASE ---
-    Use the following retrieved context to answer the user's question accurately. If the context does not contain the answer, state that you cannot find the answer in the provided documents.
-    Context: {rag_context}
+    {f"Use the following retrieved context to answer the user's question accurately. If the context does not contain the answer, state that you cannot find the answer in the provided documents.Context: {rag_context}" if use_rag else ""}
     ---
 
     --- USER PROFILE ---
@@ -155,7 +161,7 @@ def stream_chat_response_with_history(
     if enable_tools:
         # 4. INITIAL API Call (Non-Streaming to Check for Tool Use)
         try:
-            respose = client.models.generate_content(
+            response = client.models.generate_content(
                 model=settings.GOOGLE_LLM_MODEL,
                 contents=messages,
                 config=genai.types.GenerateContentConfig(
@@ -175,20 +181,20 @@ def stream_chat_response_with_history(
                 func_name = call.name
                 func_args = dict(call.args)
 
-            if func_name in TOOL_MAP:
-                function_to_call = TOOL_MAP[func_name]
-                tool_result = function_to_call(**func_args)
+                if func_name in TOOL_MAP:
+                    function_to_call = TOOL_MAP[func_name]
+                    tool_result = function_to_call(**func_args)
 
-                function_results.append(
-                    genai.types.Part.from_function_response(
-                        name=func_name,
-                        response={"result": tool_result}
+                    function_results.append(
+                        genai.types.Part.from_function_response(
+                            name=func_name,
+                            response={"result": tool_result}
+                        )
                     )
-                )
-                print(f"Tool executed: {func_name}. Result: {tool_result}")
+                    print(f"Tool executed: {func_name}. Result: {tool_result}")
 
             messages.append(response.candidates[0].content)
-            messages.append(genai,types.Content(role="tool", parts=function_results))
+            messages.append(genai.types.Content(role="tool", parts=function_results))
 
             # Call the model a second time (streaming) to get the final response
             final_response_stream = client.models.generate_content_stream(
