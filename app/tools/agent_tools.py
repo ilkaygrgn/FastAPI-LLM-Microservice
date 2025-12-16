@@ -6,6 +6,8 @@ def get_real_time_stock_price(ticker_symbol: str) -> str:
     value, or quote of a specific stock ticker (e.g., GOOG, AAPL).
     """
     # For now, we return a mock value.
+
+    print(f"DEBUG: stock price tool triggered!")
     if ticker_symbol.upper() == "GOOG":
         return "The current price for GOOG is $142.50. (Source: Mock API)"
     elif ticker_symbol.upper() == "MSFT":
