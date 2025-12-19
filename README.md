@@ -1,61 +1,67 @@
-# 🤖 FastAPI LLM Microservice
+# 🤖 AI Agent Microservice with Next.js Frontend
 
-A production-ready FastAPI microservice featuring **conversational AI**, **RAG (Retrieval-Augmented Generation)**, and **asynchronous background job processing**. Built with modern Python best practices and enterprise-level architecture.
+A production-ready **Full-Stack AI Application** featuring a **modern conversational UI**, **autonomous agent capabilities**, **RAG (Retrieval-Augmented Generation)**, and **asynchronous background processing**. Built with a Microservices architecture using FastAPI, Next.js, and Google Gemini.
 
-[![Python](https://img.shields.io/badge/Python-3.11-blue.svg)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.123.5-green.svg)](https://fastapi.tiangolo.com)
+[![Next.js](https://img.shields.io/badge/Next.js-14-black)](https://nextjs.org)
+[![Python](https://img.shields.io/badge/Python-3.11-blue.svg)](https://python.org)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://docker.com)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## 🌟 Features
 
-### Core Capabilities
-- **🗨️ Conversational AI**: Multi-turn chat with streaming responses using Google Gemini
-- **📚 RAG Implementation**: Document upload, chunking, vectorization, and intelligent retrieval
-- **🔐 JWT Authentication**: Secure endpoints with access/refresh token mechanism
-- **⚡ Async Processing**: Background tasks with Celery for document indexing and user profiling
-- **📊 Vector Search**: PostgreSQL with pgvector extension for similarity search
-- **🔄 Real-time Updates**: Server-Sent Events (SSE) for streaming chat responses
+### 🖥️ Modern Frontend (Next.js 14)
+- **Rich User Interface**: Built with Tailwind CSS, Shadcn UI, and Lucide Icons.
+- **Dark Mode Support**: Aesthetic dark/light mode toggle with OKLCH color palettes.
+- **Smart Indicators**: 
+  - **"Used RAG" Badge**: Only appears when the model *actually* uses retrieved context.
+  - **"Agent Used" Badge**: Displays exactly which tools (e.g., Stock Price, Search) were executed.
+- **Real-time Streaming**: Seamless NDJSON streaming of text and "Thought" events.
+- **Interactive Chat**: Markdown rendering, code highlighting, and message history.
 
-### Technical Highlights
-- **Microservices Architecture**: Containerized services with Docker Compose
-- **Persistent Session Management**: Redis-based conversation history
-- **User Profiling**: Automated background analysis of user conversations
-- **Document Processing**: PDF parsing, text chunking, and embedding generation
-- **Production-Ready**: Gunicorn with Uvicorn workers, proper error handling
+### 🧠 Backend & AI Agent
+- **Autonomous Agent Mode**: logic to intercept LLM tool requests, execute them, and feed results back in a loop.
+- **Manual Tool Control**: Fine-grained control over "Thought" emission for UI feedback.
+- **Chat History**: Redis-backed session persistence for infinite-scroll context.
+- **Long-term Memory**: Background tasks analyze conversation to update User Profiles.
+
+### 📚 Advanced RAG
+- **Smart Retrieval**: Context is only injected when relevant.
+- **PDF Ingestion**: Drag-and-drop info extraction pipeline.
+- **Vector Search**: High-performance similarity search using **PostgreSQL + pgvector**.
 
 ## 🏗️ Architecture
 
-```
-┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│   FastAPI   │────▶│    Redis     │     │  PostgreSQL │
-│   Service   │     │   (Broker)   │     │  + pgvector │
-└──────┬──────┘     └──────────────┘     └──────┬──────┘
-       │                    │                     │
-       │            ┌───────▼────────┐           │
-       └───────────▶│ Celery Worker  │───────────┘
-                    └────────────────┘
+```mermaid
+graph TD
+    Client[Next.js Frontend] <-->|HTTP/Stream| API[FastAPI Gateway]
+    API <-->|Auth/State| Redis[Redis (Cache/Broker)]
+    API <-->|Vector Search| DB[(PostgreSQL + pgvector)]
+    API -->|Async Task| Worker[Celery Worker]
+    Worker -->|Update| Redis
+    Worker -->|Index/Store| DB
+    API <-->|GenAI| Gemini[Google Gemini API]
+    Worker <-->|GenAI| Gemini
 ```
 
 ### Tech Stack
 
-| Component | Technology |
-|-----------|-----------|
-| **Web Framework** | FastAPI 0.123.5 |
+| Domain | Technology |
+|--------|-----------|
+| **Frontend** | Next.js 14, TypeScript, Tailwind CSS, Shadcn UI, Axios |
+| **Backend** | FastAPI, Uvicorn, Gunicorn, Pydantic |
 | **LLM Provider** | Google Gemini (gemini-2.5-flash) |
-| **Embeddings** | Google Generative AI Embeddings |
-| **Vector Database** | PostgreSQL 16 + pgvector |
-| **Message Broker** | Redis 7.2 |
-| **Task Queue** | Celery 5.5.3 |
-| **Authentication** | JWT (python-jose) |
-| **Document Processing** | LangChain, PyPDF |
-| **Containerization** | Docker + Docker Compose |
+| **Orchestration** | LangGraph, LangChain (Stateful Agent Flows) |
+| **Database** | PostgreSQL 16 (Relational + Vector) |
+| **Async Queue** | Celery + Redis |
+| **DevOps** | Docker, Docker Compose |
 
-## 📋 Prerequisites
+## 🕹️ Agent Orchestration (LangGraph Flow)
 
-- Docker & Docker Compose
-- Google AI API Key ([Get one here](https://ai.google.dev/))
-- Python 3.11+ (for local development)
+This project leverages **LangGraph** to manage complex, stateful agentic workflows. Instead of linear RAG, we use a graph-based approach:
+1.  **State Management**: The agent's conversation history and tool results are maintained in a persistent state.
+2.  **Autonomous Decisions**: The LLM evaluates the state and decides whether to fetch more data (RAG), use a real-time tool (Stock API), or respond to the user.
+3.  **Human-in-the-loop Ready**: The architecture is designed to support breakpoints where human intervention can be required for sensitive tool executions.
 
 ## 🚀 Quick Start
 
@@ -65,230 +71,65 @@ git clone https://github.com/ilkaygrgn/FastAPI-LLM-Microservice.git
 cd FastAPI-LLM-Microservice
 ```
 
-### 2. Set Environment Variables
-Create a `.env` file:
+### 2. Environment Setup
+Create a `.env` file in the root directory:
 ```bash
 GOOGLE_API_KEY=your_google_api_key_here
-SECRET_KEY=your_secret_key_for_jwt
-OPENAI_API_KEY=your_openai_key_optional
+SECRET_KEY=your_secure_secret_key
+DATABASE_URL=postgresql://user:password@db:5432/llm_db
+REDIS_URL=redis://redis:6379/0
 ```
 
-### 3. Start Services
+### 3. Start Application
 ```bash
-docker-compose up -d
+docker-compose up --build
 ```
 
-Services will be available at:
-- **API**: http://localhost:8000
-- **API Docs**: http://localhost:8000/docs
-- **PostgreSQL**: localhost:5432
-- **Redis**: localhost:6379
+Access the services:
+- **Frontend App**: [http://localhost:3000](http://localhost:3000)
+- **Backend API**: [http://localhost:8000](http://localhost:8000)
+- **API Documentation**: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-## 🔑 API Endpoints
+## � Key Workflows
 
-### Authentication
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/v1/auth/register` | Register new user |
-| POST | `/api/v1/auth/login` | Login and get tokens |
-| POST | `/api/v1/auth/refresh` | Refresh access token |
+### 🤖 Agentic Tool Usage
+1. User asks: *"What is the stock price of Google?"*
+2. **Backend**: Intercepts the intent, holds the stream.
+3. **Agent**: Executes `get_stock_price("GOOG")`.
+4. **Stream**: Emits a `Thought` event: `🔍 Agent is executing tool: Get Stock Price...`
+5. **Frontend**: Displays the specific agent badge.
+6. **Final**: Model uses the tool result to generate the natural language answer.
 
-### Chat
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/v1/llm/chat` | Stream chat response with RAG |
-
-### Document Management
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/v1/llm/upload-document` | Upload PDF for RAG indexing |
-
-### User Management
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/v1/users/me` | Get current user profile |
-
-### Background Jobs
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/v1/jobs/start` | Start a background task |
-| GET | `/api/v1/jobs/{job_id}` | Check job status |
-
-## 💡 Usage Examples
-
-### 1. Register & Login
-```bash
-# Register
-curl -X POST http://localhost:8000/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "password": "secure_password",
-    "full_name": "John Doe"
-  }'
-
-# Login
-curl -X POST http://localhost:8000/api/v1/auth/login \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "username=user@example.com&password=secure_password"
-```
-
-### 2. Upload Document for RAG
-```bash
-curl -X POST http://localhost:8000/api/v1/llm/upload-document \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -F "file=@document.pdf"
-```
-
-### 3. Chat with RAG
-```bash
-curl -X POST http://localhost:8000/api/v1/llm/chat \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message": "What does the document say about...?",
-    "session_id": "session_123"
-  }'
-```
+### 📚 "Smart" RAG
+1. **Upload**: User uploads a PDF via the Chat UI.
+2. **Indexing**: Celery worker processes and embeds the chunks into pgvector.
+3. **Query**: User asks a question with "Use RAG" toggled.
+4. **Attribution**: 
+   - If the answer uses the doc, the model tags it. 
+   - Frontend shows a green **"Used RAG"** badge.
+   - If the doc is irrelevant, no badge is shown (even if RAG mode was on).
 
 ## 🗂️ Project Structure
-
 ```
-fastapi-llm-microservice/
-├── app/
-│   ├── api/
-│   │   └── v1/
-│   │       ├── auth.py          # Authentication endpoints
-│   │       ├── users.py         # User management
-│   │       ├── llm.py           # Chat & document upload
-│   │       └── jobs.py          # Background job management
-│   ├── core/
-│   │   ├── config.py            # Configuration management
-│   │   └── security.py          # JWT & password hashing
-│   ├── db/
-│   │   ├── database.py          # Database connection
-│   │   └── models.py            # SQLAlchemy models
-│   ├── schemas/
-│   │   ├── user.py              # User schemas
-│   │   └── chat.py              # Chat request/response
-│   ├── services/
-│   │   ├── llm_service.py       # LLM integration & streaming
-│   │   ├── vector_db_service.py # RAG & embeddings
-│   │   └── chat_history.py      # Conversation persistence
-│   ├── workers/
-│   │   ├── worker.py            # Celery app configuration
-│   │   └── tasks.py             # Background tasks
-│   └── main.py                  # FastAPI application
-├── docker-compose.yml           # Multi-container orchestration
-├── Dockerfile                   # Application container
-├── requirements.txt             # Python dependencies
-└── README.md                    # This file
+├── app/                  # FastAPI Backend
+│   ├── api/v1/           # Endpoints (Auth, Chat, Users)
+│   ├── core/             # Config & Security
+│   ├── services/         # LLM, RAG, & Vector Logic
+│   └── tools/            # Agent Tools (Stock, Search, etc.)
+├── frontend/             # Next.js Frontend
+│   ├── src/app/          # App Router Pages
+│   ├── src/components/   # Chat & UI Components
+│   └── src/lib/          # Utils & API Hooks
+├── documents/            # Storage for uploaded RAG files
+├── docker-compose.yml    # Orchestration
+└── Dockerfile            # Backend Image
 ```
 
-## 🔧 Configuration
-
-### Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `GOOGLE_API_KEY` | Google AI API key | Required |
-| `SECRET_KEY` | JWT secret key | Required |
-| `DATABASE_URL` | PostgreSQL connection string | Auto-configured in Docker |
-| `REDIS_HOST` | Redis server hostname | `redis` |
-| `GOOGLE_LLM_MODEL` | Gemini model name | `gemini-2.5-flash` |
-
-### Docker Compose Services
-
-- **api**: FastAPI application (4 Gunicorn workers)
-- **worker**: Celery worker for background tasks
-- **db**: PostgreSQL 16 with pgvector extension
-- **redis**: Redis 7.2 for session storage & task queue
-
-## 📊 Database Schema
-
-### Users Table
-```sql
-- id: SERIAL PRIMARY KEY
-- email: VARCHAR UNIQUE
-- hashed_password: VARCHAR
-- full_name: VARCHAR
-- user_profile: TEXT (AI-generated from conversations)
-- is_active: BOOLEAN
-- created_at: TIMESTAMP
-```
-
-### Vector Store (pgvector)
-- `langchain_pg_collection`: Document collections
-- `langchain_pg_embedding`: Vector embeddings with metadata
-
-## 🧪 Testing
-
-### Health Check
-```bash
-curl http://localhost:8000/
-# Response: {"status":"ok","service":"FastAPI LLM Microservice"}
-```
-
-### Check Running Containers
-```bash
-docker-compose ps
-```
-
-### View Logs
-```bash
-# All services
-docker-compose logs -f
-
-# Specific service
-docker-compose logs -f api
-docker-compose logs -f worker
-```
-
-## 🔐 Security Features
-
-- **Password Hashing**: Bcrypt with salt
-- **JWT Tokens**: Short-lived access tokens (30 min) + refresh tokens (7 days)
-- **Protected Endpoints**: Bearer token authentication
-- **SQL Injection Prevention**: SQLAlchemy ORM
-- **CORS Configuration**: Configurable allowed origins
-
-## 🚧 Known Limitations
-
-- **Google API Quota**: Free tier has embedding limits (1,500 requests/day)
-- **File Upload**: Currently supports PDF only
-- **Streaming**: SSE may not work with some reverse proxies
-
-## 🛣️ Roadmap
-
-- [ ] Multi-LLM support (Claude, OpenAI, local models)
-- [ ] OpenAI embeddings fallback
-- [ ] Document chunking strategies (semantic, sliding window)
-- [ ] Conversation summarization
-- [ ] Rate limiting
-- [ ] Prometheus metrics
-- [ ] Kubernetes deployment configs
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## 📝 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 👤 Author
+## � Author
 
 **Ilkay Girgin**
 - GitHub: [@ilkaygrgn](https://github.com/ilkaygrgn)
-- LinkedIn: [linkedin.com/in/ilkaygirgin](https://linkedin.com/in/ilkaygirgin)
 
-## 🙏 Acknowledgments
-
-- [FastAPI](https://fastapi.tiangolo.com/) - Modern web framework
-- [LangChain](https://langchain.com/) - LLM application framework
-- [Google AI](https://ai.google.dev/) - Gemini API
-- [pgvector](https://github.com/pgvector/pgvector) - Vector similarity search
 
 ---
-
-⭐ **If you find this project useful, please consider giving it a star!**
+⭐ **Star this repo if you like modern AI architectures!**

@@ -1,7 +1,6 @@
 # app/services/llm_service.py
 
 import json
-# from openai import OpenAI, api_key
 from app.core.config import settings
 from typing import Generator, List, Dict
 from app.db.redis_client import redis_client
@@ -11,15 +10,12 @@ from app.models.user import User
 
 from google import genai
 
-
-# Initialize OpenAI client using the API key from the config
-#client = OpenAI(api_key=settings.OPENAI_API_KEY)
 client = genai.Client(api_key=settings.GOOGLE_API_KEY)
 
 def stream_chat_response(messages: List[Dict[str, str]]) -> Generator[str, None, None]:
     """Streams a Gemini response chunk-by-chunk."""
     try:
-        # Convert OpenAI-style messages → Gemini text format
+        
         prompt = "\n".join([f"{msg['role']}: {msg['content']}" for msg in messages])
 
         stream = client.models.generate_content_stream(
